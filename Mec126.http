@@ -1,0 +1,6 @@
+@Mec126_HostAddress = http://localhost:5129
+
+GET {{Mec126_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
