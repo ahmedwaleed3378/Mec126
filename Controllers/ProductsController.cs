@@ -1,8 +1,11 @@
-﻿using Mec126.Models;
+﻿using Mec126.Common.Exceptions;
+using Mec126.Common.Extensions;
+using Mec126.Common.Responses;
+using Mec126.Models;
+using Mec126.Models.Data;
 using Mec126.Models.DTO;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using System.Net.Http.Headers;
+using Microsoft.EntityFrameworkCore;
 
 namespace Mec126.Controllers
 {
@@ -10,124 +13,134 @@ namespace Mec126.Controllers
 	[ApiController]
 	public class ProductsController : ControllerBase
 	{
-		private static readonly List<Product> _porducts = [
-				new () {Id = 1, Name = "Keyboard", Price=25.0m, Description= "This is a keyboard" , Category= "Tech"},
-				new () {Id = 2, Name = "Mouse", Price=12.0m, Description= "This is a keyboard" , Category= "Tech"},
-				new () {Id = 3, Name = "Monitor", Price=20.0m, Description= "This is a keyboard" , Category= "Tech"},
-				
-			];
+		private readonly AppDbContext _context;
 
-
-
-
-
+		public ProductsController(AppDbContext context)
+		{
+			_context = context;
+		}
 
 		[HttpGet]
-		public ActionResult<List<ProductsDTO>> Get(
-				[FromQuery] decimal? minPrice
-			) {
-			IEnumerable<Product> query = _porducts;
+		public async Task<ActionResult<ApiResponse<PagedResult<ProductsDTO>>>> Get(
+			[FromQuery] decimal? minPrice,
+			[FromQuery] string sortBy = "id",
+			[FromQuery] string sortDir = "asc",
+			[FromQuery] int page = 1,
+			[FromQuery] int pageSize = 10)
+		{
+			if (page < 1) page = 1;
+			if (pageSize < 1) pageSize = 10;
+			if (pageSize > 100) pageSize = 100;
+
+			IQueryable<Product> query = _context.Products;
 
 			if (minPrice is not null && minPrice > 0)
-			{
 				query = query.Where(p => p.Price >= minPrice.Value);
-			}
 
-			// mapping is transforming db model or entity into the DTO 
-
-			var result = query.Select(p=> new ProductsDTO
+			query = (sortBy.ToLowerInvariant(), sortDir.ToLowerInvariant()) switch
 			{
-				Id = p.Id,
-				Name = p.Name,
-				Price = p.Price,
-			}).ToList();
+				("name", "desc") => query.OrderByDescending(p => p.Name),
+				("name", _) => query.OrderBy(p => p.Name),
+				("price", "desc") => query.OrderByDescending(p => p.Price),
+				("price", _) => query.OrderBy(p => p.Price),
+				("id", "desc") => query.OrderByDescending(p => p.Id),
+				_ => query.OrderBy(p => p.Id),
+			};
 
-			return Ok(result);
+			var totalCount = await query.CountAsync();
+
+			var items = await query
+				.Skip((page - 1) * pageSize)
+				.Take(pageSize)
+				.Select(p => new ProductsDTO
+				{
+					Id = p.Id,
+					Name = p.Name,
+					Price = p.Price,
+				})
+				.ToListAsync();
+
+			var paged = new PagedResult<ProductsDTO>
+			{
+				Items = items,
+				Page = page,
+				PageSize = pageSize,
+				TotalCount = totalCount,
+			};
+
+			return Ok(ApiResponse<PagedResult<ProductsDTO>>.Ok(paged));
 		}
-		
-		
-		//Get api/products/2
+
 		[HttpGet("{id:int}")]
-		public ActionResult<Product> GetById(int id ) {
+		public async Task<ActionResult<ApiResponse<Product>>> GetById(int id)
+		{
+			var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
+			if (product is null)
+				throw new NotFoundException($"Product with id {id} was not found.");
 
-
-			IEnumerable<Product> query = _porducts;
-
-			var product = query.FirstOrDefault(p=>p.Id ==id);
-				
-			 return Ok(product);
+			return Ok(ApiResponse<Product>.Ok(product));
 		}
-
-
-
 
 		[HttpPost]
-		public ActionResult<List<Product>> Post([FromBody] PostProductDTO postProduct)
+		public async Task<ActionResult<ApiResponse<Product>>> Post([FromBody] PostProductDTO postProduct)
 		{
-			
-			if (_porducts.Any(p => p.Name.Equals(postProduct.Name, StringComparison.OrdinalIgnoreCase)))
-				ModelState.AddModelError(nameof(postProduct.Name), "A product with the same name already exists.");
+			if (await _context.Products.AnyAsync(p => p.Name.ToLower() == postProduct.Name.ToLower()))
+				throw new ConflictException("A product with the same name already exists.");
 
 			if (!ModelState.IsValid)
-				return ValidationProblem(ModelState);
-			//BitConverter.ToInt32(Guid.NewGuid().ToByteArray(), 0)
+				return this.ValidationFail<Product>();
+
 			var created = new Product
 			{
-				Id =_porducts.Count == 0 ? 1 : _porducts.Max(p=> p.Id)+1 ,
 				Name = postProduct.Name,
 				Price = postProduct.Price,
 				Category = postProduct.Category ?? "",
-				Description = postProduct.Description ?? ""
+				Description = postProduct.Description ?? "",
 			};
 
+			_context.Products.Add(created);
+			await _context.SaveChangesAsync();
 
-			_porducts.Add(created);
-
-			return CreatedAtAction(nameof(GetById), new {id = created.Id}, created);
+			return CreatedAtAction(
+				nameof(GetById),
+				new { id = created.Id },
+				ApiResponse<Product>.Ok(created, "Product created successfully."));
 		}
-
-
 
 		[HttpPut("{id:int}")]
-		public ActionResult<Product> Update( int id, [FromBody] PostProductDTO data)
+		public async Task<ActionResult<ApiResponse<Product>>> Update(int id, [FromBody] PostProductDTO data)
 		{
-			var existing = _porducts.FirstOrDefault(p => p.Id == id);
-			if (existing is null )  
-			{
-				return NotFound();
-			}
+			var existing = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
+			if (existing is null)
+				throw new NotFoundException($"Product with id {id} was not found.");
 
-			if (_porducts.Any( p=> p.Id != id &&  p.Name.Equals(data.Name, StringComparison.OrdinalIgnoreCase)))
-				ModelState.AddModelError(nameof(data.Name), "A product with the same name already exists.");
+			if (await _context.Products.AnyAsync(p => p.Id != id && p.Name.ToLower() == data.Name.ToLower()))
+				throw new ConflictException("A product with the same name already exists.");
 
 			if (!ModelState.IsValid)
-				return ValidationProblem(ModelState);
+				return this.ValidationFail<Product>();
 
 			existing.Name = data.Name;
-			existing.Price  = data.Price;
-			existing.Category =data.Category;
-			existing.Description =data.Description;
+			existing.Price = data.Price;
+			existing.Category = data.Category ?? "";
+			existing.Description = data.Description ?? "";
 
+			await _context.SaveChangesAsync();
 
-			return Ok (existing);
-
+			return Ok(ApiResponse<Product>.Ok(existing, "Product updated successfully."));
 		}
-
 
 		[HttpDelete("{id:int}")]
-		public ActionResult<Product> Delete(int id)
+		public async Task<ActionResult<ApiResponse>> Delete(int id)
 		{
-			var existing = _porducts.FirstOrDefault(p => p.Id == id);
+			var existing = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
 			if (existing is null)
-			{
-				return NotFound();
-			}
+				throw new NotFoundException($"Product with id {id} was not found.");
 
+			_context.Products.Remove(existing);
+			await _context.SaveChangesAsync();
 
-			_porducts.Remove(existing);
-			return NoContent();
+			return Ok(ApiResponse.Ok("Product deleted successfully."));
 		}
-
-
-		}
+	}
 }

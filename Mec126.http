@@ -1,6 +1,71 @@
-@Mec126_HostAddress = http://localhost:5129
+@Mec126_HostAddress = http://localhost:5130
 
-GET {{Mec126_HostAddress}}/weatherforecast/
+### List all (default page)
+GET {{Mec126_HostAddress}}/api/products
 Accept: application/json
+
+###
+
+### Pagination — page 1, 2 items per page
+GET {{Mec126_HostAddress}}/api/products?page=1&pageSize=2
+Accept: application/json
+
+###
+
+### Pagination — page 2
+GET {{Mec126_HostAddress}}/api/products?page=2&pageSize=2
+Accept: application/json
+
+###
+
+### Sort by price descending
+GET {{Mec126_HostAddress}}/api/products?sortBy=price&sortDir=desc
+Accept: application/json
+
+###
+
+### Filter + sort + pagination
+GET {{Mec126_HostAddress}}/api/products?minPrice=10&sortBy=name&sortDir=asc&page=1&pageSize=10
+Accept: application/json
+
+###
+
+### Get by id
+GET {{Mec126_HostAddress}}/api/products/1
+Accept: application/json
+
+###
+
+### Create product
+POST {{Mec126_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "name": "Headphones",
+  "price": 45.99,
+  "category": "Tech",
+  "description": "Wireless headphones"
+}
+
+###
+
+### Validation error — missing name
+POST {{Mec126_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "price": 10
+}
+
+###
+
+### Validation error — invalid price
+POST {{Mec126_HostAddress}}/api/products
+Content-Type: application/json
+
+{
+  "name": "Bad Price Item",
+  "price": 0
+}
 
 ###
