@@ -41,12 +41,13 @@ namespace Mec126.Controllers
 			if (minPrice is not null && minPrice > 0)
 				query = query.Where(p => p.Price >= minPrice.Value);
 
+			// Cast price for ORDER BY — SQLite cannot sort decimal columns directly.
 			query = (sortBy.ToLowerInvariant(), sortDir.ToLowerInvariant()) switch
 			{
 				("name", "desc") => query.OrderByDescending(p => p.Name),
 				("name", _) => query.OrderBy(p => p.Name),
-				("price", "desc") => query.OrderByDescending(p => p.Price),
-				("price", _) => query.OrderBy(p => p.Price),
+				("price", "desc") => query.OrderByDescending(p => (double)p.Price),
+				("price", _) => query.OrderBy(p => (double)p.Price),
 				("id", "desc") => query.OrderByDescending(p => p.Id),
 				_ => query.OrderBy(p => p.Id),
 			};

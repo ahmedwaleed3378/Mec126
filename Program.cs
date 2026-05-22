@@ -23,8 +23,14 @@ namespace Mec126
 
             // Add services to the container.
 
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
             builder.Services.AddDbContext<AppDbContext>(options =>
-                options.UseSqlServer(builder.Configuration.GetConnectionString("DefaultConnection")));
+            {
+                if (builder.Environment.IsDevelopment())
+                    options.UseSqlite(connectionString);
+                else
+                    options.UseSqlServer(connectionString);
+            });
 
             builder.Services.AddIdentityCore<ApplicationUser>(options =>
                 {
@@ -55,14 +61,15 @@ namespace Mec126
                     {
                         ValidateIssuer = true,
                         ValidateAudience = true,
+                        ValidIssuer = jwtSettings.Issuer ,
+                        ValidAudience = jwtSettings.Audience ,
                         ValidateLifetime = true,
                         ValidateIssuerSigningKey = true,
-                        ValidIssuer = jwtSettings.Issuer,
-                        ValidAudience = jwtSettings.Audience,
                         IssuerSigningKey = new SymmetricSecurityKey(
                             Encoding.UTF8.GetBytes(jwtSettings.Key)),
                         RoleClaimType = ClaimTypes.Role,
                         NameClaimType = ClaimTypes.Name,
+                        
                     };
                 });
 
@@ -119,7 +126,10 @@ namespace Mec126
             using (var scope = app.Services.CreateScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-                db.Database.Migrate();
+                if (app.Environment.IsDevelopment())
+                    db.Database.EnsureCreated();
+                else
+                    db.Database.Migrate();
             }
 
             app.UseMiddleware<ExceptionHandlingMiddleware>();
