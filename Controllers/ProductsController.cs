@@ -1,9 +1,11 @@
-﻿using Mec126.Common.Exceptions;
+﻿using Mec126.Auth;
+using Mec126.Common.Exceptions;
 using Mec126.Common.Extensions;
 using Mec126.Common.Responses;
 using Mec126.Models;
 using Mec126.Models.Data;
 using Mec126.Models.DTO;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -11,6 +13,7 @@ namespace Mec126.Controllers
 {
 	[Route("api/[controller]")]
 	[ApiController]
+	[Authorize]
 	public class ProductsController : ControllerBase
 	{
 		private readonly AppDbContext _context;
@@ -21,6 +24,7 @@ namespace Mec126.Controllers
 		}
 
 		[HttpGet]
+		[Authorize(Roles = AuthRoles.ReadProducts)]
 		public async Task<ActionResult<ApiResponse<PagedResult<ProductsDTO>>>> Get(
 			[FromQuery] decimal? minPrice,
 			[FromQuery] string sortBy = "id",
@@ -72,6 +76,7 @@ namespace Mec126.Controllers
 		}
 
 		[HttpGet("{id:int}")]
+		[Authorize(Roles = AuthRoles.ReadProducts)]
 		public async Task<ActionResult<ApiResponse<Product>>> GetById(int id)
 		{
 			var product = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
@@ -82,6 +87,7 @@ namespace Mec126.Controllers
 		}
 
 		[HttpPost]
+		[Authorize(Roles = AuthRoles.Admin)]
 		public async Task<ActionResult<ApiResponse<Product>>> Post([FromBody] PostProductDTO postProduct)
 		{
 			if (await _context.Products.AnyAsync(p => p.Name.ToLower() == postProduct.Name.ToLower()))
@@ -108,6 +114,7 @@ namespace Mec126.Controllers
 		}
 
 		[HttpPut("{id:int}")]
+		[Authorize(Roles = AuthRoles.Admin)]
 		public async Task<ActionResult<ApiResponse<Product>>> Update(int id, [FromBody] PostProductDTO data)
 		{
 			var existing = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);
@@ -131,6 +138,7 @@ namespace Mec126.Controllers
 		}
 
 		[HttpDelete("{id:int}")]
+		[Authorize(Roles = AuthRoles.Admin)]
 		public async Task<ActionResult<ApiResponse>> Delete(int id)
 		{
 			var existing = await _context.Products.FirstOrDefaultAsync(p => p.Id == id);

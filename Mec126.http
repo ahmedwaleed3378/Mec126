@@ -1,7 +1,75 @@
 @Mec126_HostAddress = http://localhost:5130
 
-### List all (default page)
+### --- Authentication (users stored in SQL Server: AspNetUsers) ---
+
+### Register new account (hashed password in DB, role = User)
+POST {{Mec126_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "newstudent",
+  "email": "newstudent@mec126.local",
+  "password": "Student1!"
+}
+
+###
+
+### Register first account (becomes Admin) — run once on empty DB
+POST {{Mec126_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "email": "admin@mec126.local",
+  "password": "Admin123!"
+}
+
+###
+
+### Register second account (becomes User)
+POST {{Mec126_HostAddress}}/api/auth/register
+Content-Type: application/json
+
+{
+  "username": "user",
+  "email": "user@mec126.local",
+  "password": "User123!"
+}
+
+###
+
+### Login as Admin
+# @name loginAdmin
+POST {{Mec126_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "admin",
+  "password": "Admin123!"
+}
+
+###
+
+### Login as User (read-only)
+# @name loginUser
+POST {{Mec126_HostAddress}}/api/auth/login
+Content-Type: application/json
+
+{
+  "username": "user",
+  "password": "User123!"
+}
+
+###
+
+@adminToken = {{loginAdmin.response.body.$.data.token}}
+@userToken = {{loginUser.response.body.$.data.token}}
+
+### --- Products (require Bearer token) ---
+
+### List all (default page) — Admin or User
 GET {{Mec126_HostAddress}}/api/products
+Authorization: Bearer {{adminToken}}
 Accept: application/json
 
 ###
@@ -30,14 +98,28 @@ Accept: application/json
 
 ###
 
-### Get by id
+### Get by id — Admin or User
 GET {{Mec126_HostAddress}}/api/products/1
+Authorization: Bearer {{userToken}}
 Accept: application/json
 
 ###
 
-### Create product
+### User tries to create — expect 403 Forbidden
 POST {{Mec126_HostAddress}}/api/products
+Authorization: Bearer {{userToken}}
+Content-Type: application/json
+
+{
+  "name": "Blocked by role",
+  "price": 9.99
+}
+
+###
+
+### Create product — Admin only (403 if you use user token)
+POST {{Mec126_HostAddress}}/api/products
+Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
